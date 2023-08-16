@@ -15,8 +15,8 @@ class Wave {
         this.y.push(Array(N + 1).fill().map(() => 0));
         this.y.push(Array(N + 1).fill().map(() => 0));
 
-        this.gamma = -1;
-        this.c = 1/1000;
+        this.gamma = 30;
+        this.c = 1/200;
         this.dx = 1/this.N;
         this.dt = 0.1;
     }
@@ -75,7 +75,7 @@ class Wave {
                     )
                 ))
             }
-            return 1/(1/(c*dt)**2 - (gamma)/(2*dt)) * (
+            return 1/(1/(c*dt)**2 + (gamma)/(2*dt)) * (
                 (
                     1/dx**2 * (y_n[i + 1] - 2*y_n[i] + y_n[i-1])
                     // 0
@@ -149,7 +149,7 @@ window.addEventListener('keydown', (e) => {
 
 function animate() {
     if (animating) {
-        for (let i = 0; i < 100; i++) {
+        for (let i = 0; i < 200; i++) {
             wave.step();
         }
         drawString(wave);
