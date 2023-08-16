@@ -3,31 +3,30 @@ const ctx = canvas.getContext('2d');
 canvas.width = window.innerWidth * .7;
 canvas.height = window.innerHeight * .7;
 
+let animating = false;
+
 class Wave {
     constructor(N) {
         this.N = N;
-        this.x = Array(N).fill().map((_, i) => i/this.N);
+        this.x = Array(N + 1).fill().map((_, i) => i/this.N);
 
         this.y = [];
-        this.y.push(Array(N).fill().map(() => 0));
-        this.y.push(Array(N).fill().map(() => 0));
-        this.y.push(Array(N).fill().map(() => 0));
+        this.y.push(Array(N + 1).fill().map(() => 0));
+        this.y.push(Array(N + 1).fill().map(() => 0));
+        this.y.push(Array(N + 1).fill().map(() => 0));
 
-        this.gamma = 200;
-        this.c = 1/100;
+        this.gamma = -1;
+        this.c = 1/1000;
         this.dx = 1/this.N;
-        this.dt = 0.0000001;
+        this.dt = 0.1;
     }
 
     pull(position) {
-        const transition = position.x
-        const height = position.y;
-        this.y[this.y.length - 1] = Array(this.N).fill().map((_, i) => {
+        this.y[this.y.length - 1] = Array(this.N + 1).fill().map((_, i) => {
             if (this.x[i] < position.x) {
-                console.log(i, this.x[i] * position.x * position.y)
                 return this.x[i] / position.x * position.y;
             } else {
-                return height * (1 - (this.x[i] - position.x) / (1 - position.x));
+                return position.y * (1 - (this.x[i] - position.x) / (1 - position.x));
             }
 
         });
@@ -38,6 +37,62 @@ class Wave {
     pluck(position) {
         console.log('pluck');
         console.log(position);
+        this.y.push(Array(this.N + 1).fill().map((_, i) => {
+            if (this.x[i] < position.x) {
+                return this.x[i] / position.x * position.y;
+            } else {
+                return position.y * (1 - (this.x[i] - position.x) / (1 - position.x));
+            }
+        }));
+    }
+
+    step() {
+        const {dx, dt, c, y, gamma, N} = this;
+        const y_n = y.at(-1);
+        const y_nminus1 = y.at(-2);
+        let y_nplus1 = Array(N + 1).fill();
+        y_nplus1[0] = y_nplus1[y_nplus1.length - 1] = y_nplus1[1] = y_nplus1[y_nplus1.lenght - 2] = 0;
+        
+        y_nplus1 = y_nplus1.map((yVal, i) => {
+            if (i === 0 || i === y_nplus1.length - 1 || i === 1 || i === y_nplus1.length - 1) return yVal;
+
+            // i % 10 === 0 && console.log(i);
+            const terms = [
+                1/dx**2 * (y_n[i + 1] - 2*y_n[i] + y_n[i-1]),
+                -1 * 1/(c*dt)**2 * (y_nminus1[i] - 2*y_n[i]),
+                gamma/(2*dt) * y_nminus1[i]
+            ]
+
+            if (i % 20 === 0) {
+                console.log(terms.map(term => term * 1/(1/(c*dt)**2 - (gamma)/(2*dt))))
+                console.log('full', 1/(1/((c*dt)**2) - (gamma)/(2*dt)) * (
+                    (
+                        1/dx**2 * (y_n[i + 1] - 2*y_n[i] + y_n[i-1])
+                    ) - (
+                        1/((c*dt)**2) * (y_nminus1[i] - 2*y_n[i])
+                    ) + (
+                        gamma/(2*dt) * y_nminus1[i]
+                    )
+                ))
+            }
+            return 1/(1/(c*dt)**2 - (gamma)/(2*dt)) * (
+                (
+                    1/dx**2 * (y_n[i + 1] - 2*y_n[i] + y_n[i-1])
+                    // 0
+                ) - (
+                    1/(c*dt)**2 * (y_nminus1[i] - 2*y_n[i])
+                    // 0
+                ) + (
+                    gamma/(2*dt) * y_nminus1[i]
+                    // 0
+                )
+            )
+        })
+
+        // console.log(this.y.at(-1))
+        this.y.push(y_nplus1)
+        this.y = this.y.slice(1);
+        // console.log(this.y.at(-1))
     }
 }
 
@@ -45,13 +100,11 @@ function drawString(wave) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.beginPath();
     ctx.moveTo(0, canvas.height / 2);
-    for (let i = 0; i < wave.N; i++) {
+    for (let i = 1; i < wave.N + 1; i++) {
         const canvasCoords = convertToCanvasCoords(wave.x[i], wave.y.at(-1)[i]);
-        if (i % 20 === 0) {
-            // console.log(wave.x[i], wave.y.at(-1)[i])
-            // console.log(convertToCanvasCoords(wave.x[i], wave.y.at(-1)[i]))
+        // if (i % 20 === 0) {
 
-        }
+        // }
         ctx.lineTo(canvasCoords.x, canvasCoords.y);
     }
     // wave.y.at(-1).forEach((y, i) => {
@@ -62,13 +115,11 @@ function drawString(wave) {
     ctx.stroke();
 }
 
-const wave = new Wave(1000);
-drawString(wave);
-
 let isClicked = false;
 
 canvas.addEventListener('mousedown', () => {
     isClicked = true;
+    animating = false;
 });
 
 canvas.addEventListener('mouseup', (e) => {
@@ -77,6 +128,9 @@ canvas.addEventListener('mouseup', (e) => {
     const waveCoords = convertToWaveCoords(e.offsetX, e.offsetY);
     wave.pull(waveCoords);
     wave.pluck(waveCoords);
+
+    animating = true;
+    animate();
 });
 
 canvas.addEventListener('mousemove', (e) => {
@@ -86,6 +140,23 @@ canvas.addEventListener('mousemove', (e) => {
     }
 });
 
+window.addEventListener('keydown', (e) => {
+    if (e.key === "Enter") {
+        wave.step();
+        drawString(wave);
+    }
+})
+
+function animate() {
+    if (animating) {
+        for (let i = 0; i < 100; i++) {
+            wave.step();
+        }
+        drawString(wave);
+        requestAnimationFrame(animate);
+    }
+}
+
 function convertToCanvasCoords(x, y) {
     return {
         x: x*canvas.width,
@@ -93,9 +164,18 @@ function convertToCanvasCoords(x, y) {
     }
 }
 
+/**
+ * In wave coordinates, the canvas width is 1 and the canvas height is 1/2.
+ * So the top right corner (1,1), bottom right (1, -1), top left (0, 1), bottom left (0, -1)
+ */
 function convertToWaveCoords(x, y) {
     return {
         x: x/canvas.width,
         y: (canvas.height/2 - y)/(canvas.height/2)
     }
 }
+
+
+
+const wave = new Wave(100);
+drawString(wave);
