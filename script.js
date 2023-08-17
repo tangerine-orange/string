@@ -19,9 +19,20 @@ class Wave {
         this.c = 1/200;
         this.dx = 1/this.N;
         this.dt = 0.1;
+
+        this.playing = false;;
+    }
+
+    reset() {
+        this.y = [];
+        this.y.push(Array(this.N + 1).fill().map(() => 0));
+        this.y.push(Array(this.N + 1).fill().map(() => 0));
+        this.y.push(Array(this.N + 1).fill().map(() => 0)); 
     }
 
     pull(position) {
+        this.stop();
+        this.reset();
         this.y[this.y.length - 1] = Array(this.N + 1).fill().map((_, i) => {
             if (this.x[i] < position.x) {
                 return this.x[i] / position.x * position.y;
@@ -35,6 +46,7 @@ class Wave {
     }
 
     pluck(position) {
+        // this.reset();
         this.y.push(Array(this.N + 1).fill().map((_, i) => {
             if (this.x[i] < position.x) {
                 return this.x[i] / position.x * position.y;
@@ -42,6 +54,9 @@ class Wave {
                 return position.y * (1 - (this.x[i] - position.x) / (1 - position.x));
             }
         }));
+        console.log(this.y)
+
+        this.start();
     }
 
     step() {
@@ -53,12 +68,6 @@ class Wave {
         
         y_nplus1 = y_nplus1.map((yVal, i) => {
             if (i === 0 || i === y_nplus1.length - 1 || i === 1 || i === y_nplus1.length - 1) return yVal;
-
-            const terms = [
-                1/dx**2 * (y_n[i + 1] - 2*y_n[i] + y_n[i-1]),
-                -1 * 1/(c*dt)**2 * (y_nminus1[i] - 2*y_n[i]),
-                gamma/(2*dt) * y_nminus1[i]
-            ]
 
             return 1/(1/(c*dt)**2 + (gamma)/(2*dt)) * (
                 (
@@ -79,15 +88,26 @@ class Wave {
     }
 
     start(callback) {
+        this.playing = true;
+        this.play(callback);
+    }
+
+    stop() {
+        this.playing = false;
+    }
+
+    play(callback) {
         for (let i = 0; i < 100; i++) {
-            wave.step();
+            this.step();
         }
-        drawString(wave, callback);
-        requestAnimationFrame(() => {this.start(callback)});
+
+        if (this.playing) {
+            requestAnimationFrame(() => {this.play(callback)});
+        }
     }
 }
 
-const wave = new Wave(256);
+const wave = new Wave(128);
 
 
 function drawString(wave, callback) {
@@ -124,7 +144,6 @@ canvas.addEventListener('mouseup', (e) => {
     wave.pluck(waveCoords);
 
     animating = true;
-    // animate();
 });
 
 canvas.addEventListener('mousemove', (e) => {
@@ -142,15 +161,13 @@ window.addEventListener('keydown', (e) => {
 })
 
 function animate(callback) {
-    console.log('animate');
     if (animating) {
-        for (let i = 0; i < 100; i++) {
-            wave.step();
-        }
         drawString(wave, callback);
-        requestAnimationFrame(() => {animate(callback)});
     }
+    requestAnimationFrame(() => {animate(callback)});
 }
+
+animate();
 
 function convertToCanvasCoords(x, y) {
     return {
@@ -174,18 +191,14 @@ window.onload = () => {
     startButton.addEventListener('click', () => {
         const audioContext = new (window.AudioContext || window.webkitAudioContext)();
 
-        console.log('click');
         const startAudio = async (context) => {
             await context.audioWorklet.addModule('bypass-processor.js');
             const oscillator = new OscillatorNode(context);
-            console.log('oscillator');
-            console.log(oscillator);
             const bypasser = new AudioWorkletNode(context, 'bypass-processor');
             oscillator.connect(bypasser).connect(context.destination);
             oscillator.start();
 
             animate(() => {
-                console.log('callback');
                 bypasser.port.postMessage({
                     type: 'setAmplitudeArray', amplitudeArray: wave.y.at(-1)
                 });
